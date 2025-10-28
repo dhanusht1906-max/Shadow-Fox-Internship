@@ -1,0 +1,84 @@
+!pip install pyspellchecker tensorflow
+
+from spellchecker import SpellChecker
+import tensorflow as tf
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, LSTM, Dense
+import numpy as np
+
+spell = SpellChecker()
+
+text = "I lvoe learnng new thngs"
+words = text.split()
+corrected = [spell.correction(w) for w in words]
+print("Original text:", text)
+print("Autocorrected text:", " ".join(corrected))
+
+corpus = [
+    "I love learning new things",
+    "I love machine learning",
+    "I enjoy reading books",
+    "I enjoy coding in python",
+    "This project uses neural networks",
+    "I love programming in python",
+    "Deep learning is fascinating",
+    "Machine learning improves accuracy"
+]
+
+tokenizer = Tokenizer()
+tokenizer.fit_on_texts(corpus)
+total_words = len(tokenizer.word_index) + 1
+
+input_sequences = []
+for line in corpus:
+    token_list = tokenizer.texts_to_sequences([line])[0]
+    for i in range(1, len(token_list)):
+        seq = token_list[:i+1]
+        input_sequences.append(seq)
+
+max_len = max([len(x) for x in input_sequences])
+input_sequences = np.array(pad_sequences(input_sequences, maxlen=max_len, padding='pre'))
+
+X = input_sequences[:, :-1]
+y = input_sequences[:, -1]
+y = tf.keras.utils.to_categorical(y, num_classes=total_words)
+
+
+model = Sequential([
+    Embedding(total_words, 64, input_length=max_len-1),
+    LSTM(128),
+    Dense(total_words, activation='softmax')
+])
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+model.summary()
+
+model.fit(X, y, epochs=200, verbose=1)
+
+def predict_next_word(model, tokenizer, text, max_len):
+    token_list = tokenizer.texts_to_sequences([text])[0]
+    token_list = pad_sequences([token_list], maxlen=max_len-1, padding='pre')
+    predicted = np.argmax(model.predict(token_list, verbose=0), axis=1)
+    for word, index in tokenizer.word_index.items():
+        if index == predicted:
+            return word
+    return None
+
+seed_text = "I love"
+print("Next word prediction for:", seed_text)
+print("Predicted word:", predict_next_word(model, tokenizer, seed_text, max_len))
+
+def autocorrect_and_predict(text):
+    
+    words = text.split()
+    corrected = [spell.correction(w) for w in words]
+    corrected_text = " ".join(corrected)
+    
+    
+    next_word = predict_next_word(model, tokenizer, corrected_text, max_len)
+    print("Input text:", text)
+    print("Corrected text:", corrected_text)
+    print("Predicted next word:", next_word)
+
+autocorrect_and_predict("I lvoe")
